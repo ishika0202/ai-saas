@@ -14,14 +14,19 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import OpenAI from "openai";
 
+// Define the types to handle
+type ChatMessage = OpenAI.ChatCompletionMessageParam;
+type ChatCompletionContentPartText = OpenAI.ChatCompletionContentPartText;
+type ChatCompletionContentPartRefusal = OpenAI.ChatCompletionContentPartRefusal;
+
 const ConversationPage = () => {
     const router = useRouter();
-    const [messages, setMessages] = useState<OpenAI.ChatCompletionMessageParam[]>([]);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: {
-            promt: "", // ✅ Fixed key name to "prompt"
+            promt: "",
         },
     });
 
@@ -29,9 +34,9 @@ const ConversationPage = () => {
 
     const onSubmit = async (values: z.infer<typeof formSchema>) => {
         try {
-            const userMessage: OpenAI.ChatCompletionMessageParam = {
+            const userMessage: ChatMessage = {
                 role: "user",
-                content: values.promt, // ✅ Use "prompt" key
+                content: values.promt,
             };
 
             const newMessages = [...messages, userMessage];
@@ -42,12 +47,39 @@ const ConversationPage = () => {
 
             setMessages((current) => [...current, userMessage, response.data]);
             form.reset();
-            // TODO: Open Pro Modal
+            // TODO: Open Pro Modal (if needed)
         } catch (error: any) {
             console.log(error);
         } finally {
             router.refresh();
         }
+    };
+
+    // Adjust the content renderer to handle different types
+    const renderMessageContent = (
+        content: string | OpenAI.ChatCompletionContentPart[] | ChatCompletionContentPartText[] | (ChatCompletionContentPartText | ChatCompletionContentPartRefusal)[] | null | undefined
+    ) => {
+        if (!content) return null;
+
+        if (typeof content === "string") {
+            return content;  // Simple string message
+        }
+
+        // Handle array of ChatCompletionContentParts (including Text and Refusal)
+        return content.map((part, index) => {
+            if ("text" in part) {
+                // Handle Text content
+                return <span key={index}>{part.text}</span>;
+            }
+
+            // If it's a refusal, return a fallback message
+            if ("refusal" in part) {
+                return <span key={index}>[Refusal message]</span>;
+            }
+
+            // If the content is unknown, render fallback
+            return <span key={index}>[Unknown content]</span>;
+        });
     };
 
     return (
@@ -63,11 +95,11 @@ const ConversationPage = () => {
                 <div>
                     <Form {...form}>
                         <form
-                            onSubmit={form.handleSubmit(onSubmit)}
+                            onSubmit={form.handleSubmit(onSubmit)}  // Form submission using react-hook-form
                             className="rounded-lg border w-full p-4 px-3 md:px-6 focus-within:shadow-sm grid grid-cols-12 gap-2"
                         >
                             <FormField
-                                name="prompt" // ✅ Fixed key name to "prompt"
+                                name="promt"
                                 render={({ field }) => (
                                     <FormItem className="col-span-12 lg:col-span-10">
                                         <FormControl className="m-0 p-0">
@@ -81,7 +113,11 @@ const ConversationPage = () => {
                                     </FormItem>
                                 )}
                             />
-                            <Button className="col-span-12 lg:col-span-2 w-full" disabled={isLoading}>
+                            <Button
+                                type="submit"  // Ensure it's a submit button
+                                className="col-span-12 lg:col-span-2 w-full cursor-pointer"
+                                disabled={isLoading}  // Disable while loading
+                            >
                                 Generate
                             </Button>
                         </form>
@@ -89,12 +125,9 @@ const ConversationPage = () => {
                 </div>
                 <div className="space-y-4 mt-4">
                     <div className="flex flex-col-reverse gap-y-4">
-                        {messages.map((message, index) => (
+                    {messages.map((message: ChatMessage, index: number) => (
                             <div key={index}>
-                                {typeof message.content === "string"
-                                    ? message.content
-                                    : (message.content as { text: string }[]).map((part) => part.text).join(" ")}{" "}
-                                {/* ✅ Explicit type casting */}
+                                {renderMessageContent(message.content)}
                             </div>
                         ))}
                     </div>
