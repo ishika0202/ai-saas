@@ -2,7 +2,7 @@
 
 import * as z from "zod";
 import { Heading } from "@/components/heading";
-import { MessageSquare } from "lucide-react";
+import { Bot, MessageSquare } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { formSchema } from "./constants";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,8 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import axios from "axios";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState } from "react"; 
 import OpenAI from "openai";
+import { Empty } from "@/components/empty";
+import { Loader } from "@/components/loader";
+import { cn } from "@/lib/utils";
+import { UserAvatar } from "@/components/user-avatar";
+import { BotAvatar } from "@/components/bot-avatar";
 
 // Define the types to handle
 type ChatMessage = OpenAI.ChatCompletionMessageParam;
@@ -45,9 +50,19 @@ const ConversationPage = () => {
                 messages: newMessages,
             });
 
-            setMessages((current) => [...current, userMessage, response.data]);
+            console.log('Response from API:', response.data);  // Log response
+
+            const assistantMessage: ChatMessage = {
+                role: "assistant",
+                content: response.data.choices[0].message.content,  // Adjust to extract the content from the response
+            };
+
+            setMessages((current) => [
+                ...current,
+                userMessage,
+                assistantMessage,
+            ]);
             form.reset();
-            // TODO: Open Pro Modal (if needed)
         } catch (error: any) {
             console.log(error);
         } finally {
@@ -55,29 +70,25 @@ const ConversationPage = () => {
         }
     };
 
-    // Adjust the content renderer to handle different types
+
     const renderMessageContent = (
         content: string | OpenAI.ChatCompletionContentPart[] | ChatCompletionContentPartText[] | (ChatCompletionContentPartText | ChatCompletionContentPartRefusal)[] | null | undefined
     ) => {
         if (!content) return null;
 
         if (typeof content === "string") {
-            return content;  // Simple string message
+            return content;  
         }
 
-        // Handle array of ChatCompletionContentParts (including Text and Refusal)
         return content.map((part, index) => {
             if ("text" in part) {
-                // Handle Text content
                 return <span key={index}>{part.text}</span>;
             }
 
-            // If it's a refusal, return a fallback message
             if ("refusal" in part) {
                 return <span key={index}>[Refusal message]</span>;
             }
 
-            // If the content is unknown, render fallback
             return <span key={index}>[Unknown content]</span>;
         });
     };
@@ -124,13 +135,23 @@ const ConversationPage = () => {
                     </Form>
                 </div>
                 <div className="space-y-4 mt-4">
+                    {isLoading && (
+                        <div className="p-8 rounded-lg w-full flex items-center justify-center bg-muted">
+                            <Loader/>
+                        </div>
+                    )}
+                    {messages.length === 0 && !isLoading && (<Empty label="No conversation started"/>)}
                     <div className="flex flex-col-reverse gap-y-4">
-                    {messages.map((message: ChatMessage, index: number) => (
-                            <div key={index}>
-                                {renderMessageContent(message.content)}
+                        {messages.map((message, index) => (
+                            <div key={index} className={cn("p-8 w-full flex items-start gap-x-8 rounded-lg",
+                                message.role === "user"? "bg-white border border-black/10" : "bg-muted"
+                            )}>
+                                <strong>{message.role === "user" ? <UserAvatar/> : <BotAvatar/> }</strong>
+                                <div className="text-sm">{renderMessageContent(message.content)}</div>
                             </div>
                         ))}
                     </div>
+
                 </div>
             </div>
         </div>
